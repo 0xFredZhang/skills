@@ -32,31 +32,31 @@ Read-only multi-agent review for **uncommitted Go code changes**. Reviews only m
 digraph review_flow {
     rankdir=TB;
     "Start" [shape=doublecircle];
-    "Phase 1: Git Discovery\n(1 Haiku agent)" [shape=box];
+    "Phase 1: Git Discovery\n(1 agent)" [shape=box];
     "Has Go changes?" [shape=diamond];
-    "Phase 2: Parallel Review\n(4 Sonnet agents, 2 per batch × 2 batches)" [shape=box];
-    "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)" [shape=box];
+    "Phase 2: Parallel Review\n(4 agents, 2 per batch × 2 batches)" [shape=box];
+    "Phase 3: Confidence Scoring\n(agents, max 5 parallel)" [shape=box];
     "Phase 4: Console Report" [shape=box];
     "No Go changes - exit" [shape=doublecircle];
     "Done" [shape=doublecircle];
 
-    "Start" -> "Phase 1: Git Discovery\n(1 Haiku agent)";
-    "Phase 1: Git Discovery\n(1 Haiku agent)" -> "Has Go changes?";
-    "Has Go changes?" -> "Phase 2: Parallel Review\n(4 Sonnet agents, 2 per batch × 2 batches)" [label="yes"];
+    "Start" -> "Phase 1: Git Discovery\n(1 agent)";
+    "Phase 1: Git Discovery\n(1 agent)" -> "Has Go changes?";
+    "Has Go changes?" -> "Phase 2: Parallel Review\n(4 agents, 2 per batch × 2 batches)" [label="yes"];
     "Has Go changes?" -> "No Go changes - exit" [label="no"];
-    "Phase 2: Parallel Review\n(4 Sonnet agents, 2 per batch × 2 batches)" -> "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)";
-    "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)" -> "Phase 4: Console Report";
+    "Phase 2: Parallel Review\n(4 agents, 2 per batch × 2 batches)" -> "Phase 3: Confidence Scoring\n(agents, max 5 parallel)";
+    "Phase 3: Confidence Scoring\n(agents, max 5 parallel)" -> "Phase 4: Console Report";
     "Phase 4: Console Report" -> "Done";
 }
 ```
 
-**Agent execution:** Use the `Agent` tool with `subagent_type: "general-purpose"` and set `model` parameter as specified. For parallel agents, include multiple Agent tool calls in a **single message**.
+**Agent execution:** Use the `Agent` tool for all sub-agents and **do not set `model`**. Sub-agents must inherit the active main-session model (for example: main session `gpt-5.3-codex` -> sub-agents `gpt-5.3-codex`). For parallel agents, include multiple Agent tool calls in a **single message**.
 
 ---
 
-### Phase 1: Git Discovery (1 Haiku Agent)
+### Phase 1: Git Discovery (1 Agent)
 
-Launch **1 Haiku agent**:
+Launch **1 agent**:
 
 **Agent G1 - Git Diff Discovery:**
 
@@ -117,7 +117,7 @@ TOTAL: [N] changed Go files ([M] staged, [K] unstaged)
 
 ---
 
-### Phase 2: Parallel Review (4 Sonnet Agents, 2 Per Batch)
+### Phase 2: Parallel Review (4 Agents, 2 Per Batch)
 
 Using the diff, file contents, and project context from Phase 1, launch review agents in **2 sequential batches of 2 parallel agents each**.
 
@@ -157,7 +157,7 @@ ISSUES:
 
 **Batch 1 (Parallel — R1 + R2):**
 
-**Agent R1 - Correctness, Concurrency & Safety** (model: sonnet):
+**Agent R1 - Correctness, Concurrency & Safety:**
 
 ```
 Review ONLY the changed Go code (from the diff). You have the full file contents for context, but ONLY report issues in changed/added lines.
@@ -181,7 +181,7 @@ Concurrency:
 - unbounded goroutine creation: Missing semaphore/worker pool?
 ```
 
-**Agent R2 - Error Handling & Security** (model: sonnet):
+**Agent R2 - Error Handling & Security:**
 
 ```
 Review ONLY the changed Go code (from the diff). You have the full file contents for context, but ONLY report issues in changed/added lines.
@@ -203,7 +203,7 @@ Security (exploitable = at least High, remotely exploitable = Critical):
 
 **Batch 2 (Parallel — R3 + R4):**
 
-**Agent R3 - Observability** (model: sonnet):
+**Agent R3 - Observability:**
 
 ```
 Review ONLY the changed Go code (from the diff). You have the full file contents for context, but ONLY report issues in changed/added lines.
@@ -216,7 +216,7 @@ Issues should be High, Medium, or Low severity only:
 - context in logs: Request ID, trace ID propagated?
 ```
 
-**Agent R4 - Architecture & API Design** (model: sonnet):
+**Agent R4 - Architecture & API Design:**
 
 ```
 Review ONLY the changed Go code (from the diff). You have the full file contents for context, but ONLY report issues in changed/added lines.
@@ -233,9 +233,9 @@ NOTE: Only report architectural concerns that are clearly impactful. Do not nitp
 
 ---
 
-### Phase 3: Confidence Scoring (Haiku Agents, Max 5 Parallel)
+### Phase 3: Confidence Scoring (Agents, Max 5 Parallel)
 
-Collect all issues from Phase 2. For each issue, launch a **Haiku agent** to score confidence. Run in batches of **max 5 agents in parallel**.
+Collect all issues from Phase 2. For each issue, launch a **scoring agent** to score confidence. Run in batches of **max 5 agents in parallel**.
 
 **Scoring Prompt Template:**
 
@@ -283,11 +283,13 @@ Return ONLY: { "score": N, "reasoning": "one sentence" }
 
 **Output the report directly to console** using the format below. Do NOT write any files.
 
-ALL report content in Chinese (中文), code snippets remain in English.
+All report content must be in Chinese; code snippets remain in English.
 
 **Console Report Format:**
 
-```
+The template below is intentionally in Chinese because the final console output must be Chinese.
+
+````markdown
 # Git Review Go 审查报告
 
 ## 变更概览
@@ -337,7 +339,7 @@ ALL report content in Chinese (中文), code snippets remain in English.
 - 已排除预先存在的问题，仅审查变更/新增代码
 - 置信度低于阈值的问题已被过滤
 - 跨 Agent 重复发现的同一问题已合并去重
-```
+````
 
 If no issues remain after filtering, output:
 
@@ -355,17 +357,18 @@ If no issues remain after filtering, output:
 - Writing report to a file → **STOP**. Output to console only.
 - Reporting issues in unchanged code → **STOP**. Only review changed lines.
 - Skipping confidence scoring → **STOP**. False positives waste developer time.
+- Setting explicit `model` on sub-agents → **STOP**. Always inherit the main-session model.
 - Outputting report in English → **STOP**. Report must be in Chinese.
 - Marking architecture suggestions as bugs → **STOP**. Architecture is suggestion only.
 - Reviewing generated files → **STOP**. Skip generated code.
 
 ## Quick Reference
 
-| Phase | Agents | Model | Parallelism |
+| Phase | Agents | Model Policy | Parallelism |
 |-------|--------|-------|-------------|
-| 1. Git Discovery | G1 | Haiku | 1 agent |
-| 2. Review | R1-R4 | Sonnet | 2 parallel per batch, 2 batches |
-| 3. Scoring | S1-Sn | Haiku | Max 5 parallel per batch |
+| 1. Git Discovery | G1 | Inherit main-session model | 1 agent |
+| 2. Review | R1-R4 | Inherit main-session model | 2 parallel per batch, 2 batches |
+| 3. Scoring | S1-Sn | Inherit main-session model | Max 5 parallel per batch |
 | 4. Report | Main agent | - | Sequential, console output |
 
 | Category | Severity Range | Agent |

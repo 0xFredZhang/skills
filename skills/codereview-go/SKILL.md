@@ -33,27 +33,27 @@ Read-only multi-agent **full-project** code review for Go projects. Finds bugs, 
 digraph review_flow {
     rankdir=TB;
     "Start" [shape=doublecircle];
-    "Phase 1: Discovery\n(2 Haiku agents, parallel)" [shape=box];
-    "Phase 2: Parallel Review\n(6 Sonnet agents, 2 per batch × 3 batches)" [shape=box];
-    "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)" [shape=box];
+    "Phase 1: Discovery\n(2 agents, parallel)" [shape=box];
+    "Phase 2: Parallel Review\n(6 agents, 2 per batch × 3 batches)" [shape=box];
+    "Phase 3: Confidence Scoring\n(agents, max 5 parallel)" [shape=box];
     "Phase 4: Deduplicate & Generate report.md" [shape=box];
     "Done" [shape=doublecircle];
 
-    "Start" -> "Phase 1: Discovery\n(2 Haiku agents, parallel)";
-    "Phase 1: Discovery\n(2 Haiku agents, parallel)" -> "Phase 2: Parallel Review\n(6 Sonnet agents, 2 per batch × 3 batches)";
-    "Phase 2: Parallel Review\n(6 Sonnet agents, 2 per batch × 3 batches)" -> "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)";
-    "Phase 3: Confidence Scoring\n(Haiku agents, max 5 parallel)" -> "Phase 4: Deduplicate & Generate report.md";
+    "Start" -> "Phase 1: Discovery\n(2 agents, parallel)";
+    "Phase 1: Discovery\n(2 agents, parallel)" -> "Phase 2: Parallel Review\n(6 agents, 2 per batch × 3 batches)";
+    "Phase 2: Parallel Review\n(6 agents, 2 per batch × 3 batches)" -> "Phase 3: Confidence Scoring\n(agents, max 5 parallel)";
+    "Phase 3: Confidence Scoring\n(agents, max 5 parallel)" -> "Phase 4: Deduplicate & Generate report.md";
     "Phase 4: Deduplicate & Generate report.md" -> "Done";
 }
 ```
 
-**Agent execution:** Use the `Agent` tool with `subagent_type: "general-purpose"` and set `model` parameter to `"haiku"` or `"sonnet"` as specified. For parallel agents, include multiple Agent tool calls in a **single message**.
+**Agent execution:** Use the `Agent` tool for all sub-agents and **do not set `model`**. Sub-agents must inherit the active main-session model (for example: main session `gpt-5.3-codex` -> sub-agents `gpt-5.3-codex`). For parallel agents, include multiple Agent tool calls in a **single message**.
 
 ---
 
-### Phase 1: Discovery (2 Haiku Agents, Parallel)
+### Phase 1: Discovery (2 Agents, Parallel)
 
-Launch **2 Haiku agents in parallel** (single message, 2 Agent tool calls):
+Launch **2 agents in parallel** (single message, 2 Agent tool calls):
 
 **Agent D1 - File Discovery:**
 
@@ -115,7 +115,7 @@ DEPENDENCIES: (list top 10 direct deps)
 
 ---
 
-### Phase 2: Parallel Review (6 Sonnet Agents, 2 Per Batch)
+### Phase 2: Parallel Review (6 Agents, 2 Per Batch)
 
 Using the file list and project summary from Phase 1, launch review agents in **3 sequential batches of 2 parallel agents each** (Batch 1 → wait → Batch 2 → wait → Batch 3).
 
@@ -163,7 +163,7 @@ ISSUES:
 
 **Batch 1 (Parallel — R1 + R2):**
 
-**Agent R1 - Correctness & Safety** (model: sonnet):
+**Agent R1 - Correctness & Safety:**
 
 Read Go source files from Phase 1. Focus on issues causing panic, resource leaks, undefined behavior, or state inconsistency. Use the checklist below; for code examples of each pattern, read `review-checklist.md` section 1 from the skill directory.
 
@@ -177,7 +177,7 @@ Checklist:
 - `io.Closer`: All properly closed? `resp.Body.Close()` deferred after nil check?
 - type assertions: Unchecked type assertions that could panic?
 
-**Agent R2 - Concurrency & Performance** (model: sonnet):
+**Agent R2 - Concurrency & Performance:**
 
 Read Go source files from Phase 1. Evaluate concurrency safety and runtime efficiency. Apply Go memory model reasoning. Use the checklist below; for code examples of each pattern, read `review-checklist.md` section 2 from the skill directory.
 
@@ -193,7 +193,7 @@ Checklist:
 
 **Batch 2 (Parallel — R3 + R4):**
 
-**Agent R3 - Error Handling** (model: sonnet):
+**Agent R3 - Error Handling:**
 
 Read Go source files from Phase 1. Evaluate whether failures are correctly modeled and propagated. Use the checklist below; for code examples, read `review-checklist.md` section 3 from the skill directory.
 
@@ -205,7 +205,7 @@ Checklist:
 - `errors.Is`/`errors.As`: Used correctly? Custom types implement `Unwrap()`?
 - panic as control flow: `panic` for non-fatal errors? Missing `recover` in goroutines?
 
-**Agent R4 - Security** (model: sonnet):
+**Agent R4 - Security:**
 
 Read Go source files from Phase 1. Identify security vulnerabilities. **Assume all external input is untrusted.** Exploitable vulnerabilities are **at least High; remotely exploitable = Critical**. Use the checklist below; for code examples, read `review-checklist.md` section 4 from the skill directory.
 
@@ -219,7 +219,7 @@ Checklist:
 
 **Batch 3 (Parallel — R5 + R6):**
 
-**Agent R5 - Observability** (model: sonnet):
+**Agent R5 - Observability:**
 
 Read Go source files from Phase 1. Evaluate production operability. **Issues from this agent should be High, Medium, or Low severity only** (not Critical or Optimize). Use the checklist below; for code examples, read `review-checklist.md` section 5 from the skill directory.
 
@@ -231,7 +231,7 @@ Checklist:
 - metrics/tracing: Key operations lack timing/counting?
 - sensitive data leaks: Passwords, tokens, PII logged?
 
-**Agent R6 - Architecture & API Design** (model: sonnet):
+**Agent R6 - Architecture & API Design:**
 
 Read Go source files from Phase 1. Focus on long-term maintainability. **All issues from this agent are Optimize (O) level only.** Use the checklist below; for code examples, read `review-checklist.md` section 6 from the skill directory.
 
@@ -246,9 +246,9 @@ Checklist:
 
 ---
 
-### Phase 3: Confidence Scoring (Haiku Agents, Max 5 Parallel)
+### Phase 3: Confidence Scoring (Agents, Max 5 Parallel)
 
-Collect all issues from Phase 2. For each issue, launch a **Haiku agent** to score confidence. Run in batches of **max 5 agents in parallel** until all issues are scored.
+Collect all issues from Phase 2. For each issue, launch a **scoring agent** to score confidence. Run in batches of **max 5 agents in parallel** until all issues are scored.
 
 **Scoring Prompt Template:**
 
@@ -296,7 +296,7 @@ Return ONLY: { "score": N, "reasoning": "one sentence" }
 
 **Report generation:** Write `report.md` to `[PROJECT_PATH]/report.md` using the template from `report-template.md`.
 
-- ALL report content in Chinese (中文), code snippets remain in English
+- All report content must be in Chinese; code snippets remain in English
 - Use `file_path:L[start]-L[end]` format for code references
 - Include at least 2 lines of context before and after problematic code
 - Increment issue codes within each severity: C01, C02... H01, H02...
@@ -309,6 +309,7 @@ Return ONLY: { "score": N, "reasoning": "one sentence" }
 - Modifying any source code file → **STOP**. This is read-only review.
 - Skipping confidence scoring → **STOP**. False positives waste developer time.
 - Not using multi-agent parallel review → **STOP**. Sequential review misses cross-cutting issues.
+- Setting explicit `model` on sub-agents → **STOP**. Always inherit the main-session model.
 - Outputting report in English → **STOP**. Report must be in Chinese.
 - Marking architecture issues as bugs → **STOP**. Architecture goes to Optimize (O) only.
 - Running `go build` or `go test` → **STOP**. Build/test will run in CI separately.
@@ -317,11 +318,11 @@ Return ONLY: { "score": N, "reasoning": "one sentence" }
 
 ## Quick Reference
 
-| Phase | Agents | Model | Parallelism |
+| Phase | Agents | Model Policy | Parallelism |
 |-------|--------|-------|-------------|
-| 1. Discovery | D1, D2 | Haiku | 2 parallel |
-| 2. Review | R1-R6 | Sonnet | 2 parallel per batch, 3 batches |
-| 3. Scoring | S1-Sn | Haiku | Max 5 parallel per batch |
+| 1. Discovery | D1, D2 | Inherit main-session model | 2 parallel |
+| 2. Review | R1-R6 | Inherit main-session model | 2 parallel per batch, 3 batches |
+| 3. Scoring | S1-Sn | Inherit main-session model | Max 5 parallel per batch |
 | 4. Report | Main agent | - | Sequential |
 
 | Category | Severity Range | Agent |
