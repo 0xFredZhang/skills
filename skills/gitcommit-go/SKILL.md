@@ -5,7 +5,7 @@ description: Use when generating git commit messages for Go projects. Triggers o
 
 # Git Commit Message Generator (Go)
 
-Generate a standards-compliant commit message by analyzing git diff. **Output only the commit message. Never execute `git commit`.**
+Generate a standards-compliant commit message by analyzing git diff. **Output only the commit message(s). Never execute `git commit`.**
 
 ## Execution Steps
 
@@ -21,12 +21,37 @@ git diff --cached
 git diff
 ```
 
-### Step 2: Analyze Changes
+Also check if a root-level CLAUDE.md exists and read it to detect project architecture:
+
+```bash
+cat CLAUDE.md 2>/dev/null || cat claude.md 2>/dev/null
+```
+
+### Step 2: Detect Project Architecture
+
+**Is this a multi-module project?**
+
+Check CLAUDE.md for signals like:
+- Listed sub-projects or modules (e.g., `wallet`, `tokentool`, `server`)
+- Monorepo structure descriptions
+- Module-specific directories at the root level
+
+**Decision:**
+
+```
+CLAUDE.md describes multiple modules?
+├── YES → multi-module mode: use <type>(<module>) format
+│         split commits by module if changes span multiple modules
+└── NO  → single-module mode: infer scope from file path patterns (Step 3b)
+```
+
+### Step 3: Analyze Changes
 
 From the diff output:
 - Identify all modified files and their paths
+- Group files by their top-level directory / module
 - Count added/removed lines per file
-- Identify the primary change pattern
+- Identify the primary change pattern per module
 
 **Core change priority (highest wins for subject line):**
 
@@ -46,9 +71,20 @@ From the diff output:
 
 **Rule:** `feat/fix/refactor/perf` become the subject type. `style/docs/test/chore` go in the body unless they are the only change.
 
-### Step 3: Infer Scope
+### Step 3a: Multi-Module Mode — Infer Module
 
-Determine scope from the file paths changed:
+Use the module name directly from CLAUDE.md architecture description, matched against file paths:
+
+| Changed files under... | Module scope |
+|------------------------|--------------|
+| `wallet/` | `wallet` |
+| `tokentool/` | `tokentool` |
+| `server/` or `api/` | `server` |
+| Root config only | omit module scope |
+
+**If changes span multiple modules → plan separate commits, one per module.**
+
+### Step 3b: Single-Module Mode — Infer Scope from Paths
 
 | Scope | File path patterns |
 |-------|-------------------|
@@ -62,11 +98,11 @@ Determine scope from the file paths changed:
 
 Use the scope of the **primary changed package**. Omit scope if changes span too many areas.
 
-### Step 4: Generate Commit Message
+### Step 4: Generate Commit Message(s)
 
-Format:
+**Format:**
 ```
-<type>(<scope>): <description>
+<type>(<module-or-scope>): <description>
 
 [optional body]
 
@@ -82,7 +118,7 @@ Format:
 
 **Add body when:**
 - Multiple related changes exist beyond the core change
-- Changes span multiple files or modules
+- Changes span multiple files within the same module
 - Important technical decisions need explanation
 - There are side effects or breaking changes
 
@@ -97,33 +133,74 @@ Format:
 - Closing an issue: `Closes #123`
 - Breaking change: `BREAKING CHANGE: describe the change`
 
+**Multi-module output format:**
+
+When changes span multiple modules, output ALL commit messages together with clear separators and staging instructions:
+
+```
+========== Commit 1: wallet ==========
+Stage: git add wallet/
+
+feat(wallet): add balance query endpoint
+
+- Add HTTP handler for balance lookup
+- Add unit tests for balance service
+
+========== Commit 2: tokentool ==========
+Stage: git add tokentool/
+
+fix(tokentool): resolve token expiry validation bug
+
+- Correct timestamp comparison logic
+- Add edge case handling for zero expiry
+```
+
 ## Examples
 
-### Single core change
+### Single module change
 ```
-feat(auth): add JWT token refresh mechanism
+feat(wallet): add balance query endpoint
 ```
 
-### Core change with related secondary changes
+### Module change with related secondary changes
 ```
-feat(auth): add JWT token refresh mechanism
+feat(wallet): add balance query endpoint
 
-- Update authentication documentation
-- Add unit tests for token refresh flow
-- Fix code formatting issues
+- Add unit tests for balance service
+- Update API documentation
+- Fix import ordering
 ```
 
 ### Fix with context
 ```
-fix(api): resolve user data validation error
+fix(tokentool): resolve token expiry validation bug
 
-- Update API documentation with validation rules
-- Add error handling for edge cases
+- Correct timestamp comparison logic
+- Add edge case handling for zero expiry
+```
+
+### Multi-module changes (output TWO separate messages)
+```
+========== Commit 1: wallet ==========
+Stage: git add wallet/
+
+feat(wallet): add multi-currency support
+
+- Add currency conversion service
+- Update wallet model with currency field
+
+========== Commit 2: tokentool ==========
+Stage: git add tokentool/
+
+refactor(tokentool): simplify token generation logic
+
+- Remove legacy token format support
+- Consolidate token factory methods
 ```
 
 ### Large refactor with breaking change
 ```
-refactor(core): restructure approval module architecture
+refactor(wallet): restructure approval module architecture
 
 - Remove generated mock files and outdated interfaces
 - Introduce new approval repository pattern
@@ -144,18 +221,21 @@ perf(db): optimize user query with proper indexing
 ## Red Flags - You Are Doing It Wrong
 
 - Executing `git commit` → **STOP**. Output only, never commit.
-- Generating multiple commit messages → **STOP**. Always produce ONE unified message.
-- Adding explanation before or after the commit message → **STOP**. Output only the commit message.
+- Changes span multiple modules but you generated ONE message → **STOP**. Split by module, output one message per module with staging instructions.
+- Generating multiple messages for changes within the SAME module → **STOP**. Consolidate into one message.
+- Adding explanation before or after the commit message(s) → **STOP**. Output only the message(s) with separators if multi-module.
 - Using past tense (`added`, `fixed`) → **STOP**. Use imperative (`add`, `fix`).
 - Subject line over 72 characters → **STOP**. Shorten or omit scope.
 - Vague descriptions (`fix bug`, `update code`) → **STOP**. Be specific about what changed.
+- Ignoring CLAUDE.md architecture info → **STOP**. Always check for multi-module project structure.
 
 ## Quick Reference
 
 | Element | Rule |
 |---------|------|
 | Type | Required. Use priority table above. |
-| Scope | Optional but recommended. Infer from file paths. |
+| Module/Scope | Optional but recommended. Use module name (multi-module) or infer from file paths (single-module). |
 | Description | Required. Imperative, lowercase, ≤72 chars total. |
-| Body | Optional. Use when multiple related changes exist. |
+| Body | Optional. Use when multiple related changes exist within same module. |
 | Footer | Optional. For issue refs and breaking changes only. |
+| Multiple modules | Output one commit message per module with `git add <module>/` staging instructions. |
