@@ -155,6 +155,27 @@ fix(tokentool): resolve token expiry validation bug
 - Add edge case handling for zero expiry
 ```
 
+### Step 5: Enforce Shell-Safe Output
+
+The message is meant to be used directly in `git commit -m "<message>"`. Before outputting, scan EVERY line — subject, body, and footer — and remove or replace any character the shell interprets inside double quotes. One stray character breaks or corrupts the command.
+
+**Forbidden characters (each one breaks `git commit -m "..."`):**
+
+- `"` double quote — ends the message string early. Fix: omit it, or rephrase without quotes.
+- `` ` `` backtick — triggers shell command substitution. Fix: write the identifier as plain text.
+- `$` dollar sign — triggers variable / `$(...)` expansion. Fix: spell the word out.
+- `\` backslash — shell escape character. Fix: omit it; use `/` for paths.
+- `!` exclamation mark — triggers bash history expansion. Fix: omit it; rephrase.
+
+**Allowed:** letters, numbers, spaces, and `- _ . , : ; ( ) / @ #`. Apostrophes (`'`) are safe inside double quotes — avoid them only if the message may instead be wrapped in single quotes.
+
+**Most common mistake — backticked identifiers.** Write code identifiers, types, and function names as plain text, never wrapped in backticks:
+
+```
+Bad:  fix(api): handle `nil` return from `UserRepo.Find`
+Good: fix(api): handle nil return from UserRepo.Find
+```
+
 ## Examples
 
 ### Single module change
@@ -228,6 +249,8 @@ perf(db): optimize user query with proper indexing
 - Subject line over 72 characters → **STOP**. Shorten or omit scope.
 - Vague descriptions (`fix bug`, `update code`) → **STOP**. Be specific about what changed.
 - Ignoring CLAUDE.md architecture info → **STOP**. Always check for multi-module project structure.
+- Message contains `"`, a backtick, `$`, `\`, or `!` → **STOP**. These break `git commit -m "..."`. Rewrite with plain shell-safe text (Step 5).
+- Wrapping code identifiers in backticks → **STOP**. Write them as plain text (e.g. `UserRepo`, not a backticked token).
 
 ## Quick Reference
 
@@ -239,3 +262,4 @@ perf(db): optimize user query with proper indexing
 | Body | Optional. Use when multiple related changes exist within same module. |
 | Footer | Optional. For issue refs and breaking changes only. |
 | Multiple modules | Output one commit message per module with `git add <module>/` staging instructions. |
+| Shell-safe | Required. No `"`, backtick, `$`, `\`, or `!` anywhere — the message must survive `git commit -m "..."`. |
